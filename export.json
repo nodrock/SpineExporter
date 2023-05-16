@@ -4,7 +4,7 @@
     "project": "project.spine",
     "output": "output",
     "open": false,
-    "extension": ".skel",
+    "extension": ".skel.bytes",
     "nonessential": false,
     "cleanUp": true,
     "packAtlas": {

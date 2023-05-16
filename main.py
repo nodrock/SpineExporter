@@ -9,6 +9,7 @@ import argparse
 import concurrent.futures
 import tempfile
 import time
+from PIL import Image
 
 
 def modify_export_json(export_json_path, spine_file, output, export_scale):
@@ -40,14 +41,19 @@ def try_export(export_json_path, export_scale, output_path, spine_file, spine_pa
     modify_export_json(export_json_path, spine_file, output_path, export_scale)
     # print(f"Trying with scale {export_scale}...", end="\r")
     # sys.stdout.flush()
-    subprocess.call(spine_params, stdout=subprocess.DEVNULL)
+    result = subprocess.run(spine_params, capture_output=True)
+    if result.returncode != 0:
+        output = result.stdout.decode()
+        if "Image does not fit within max page" not in output:
+            print(f"Error while exporting {spine_file} with scale {export_scale}:\n {result.stdout.decode()}")
+        return False
     return check_output_folder(output_path)
 
 
 def export_spine(spine_exec, export_json, spine_file, output, base_path=None):
     tmp_dir = tempfile.mkdtemp()
     start_time = time.time()
-    print(f"Processing {os.path.basename(spine_file)}...")
+    print(f"Processing {os.path.basename(spine_file)}... ({tmp_dir})")
     export_scale = 1.0
     output_path = output if output is not None \
         else f"{os.path.splitext(spine_file)[0]}_export"
@@ -105,7 +111,11 @@ def export_spine(spine_exec, export_json, spine_file, output, base_path=None):
     if failed:
         print(f"Failed for '{spine_file}' output='{output_path}' in {elapsed_time:.2f}s")
     else:
-        print(f"Export completed for '{spine_file}' scale={export_scale} output='{output_path}' in {elapsed_time:.2f}s")
+        png_files = [f for f in os.listdir(output_path) if f.endswith(".png")]
+        png_file = os.path.join(output_path, png_files[0])
+        width, height = get_png_resolution(png_file)
+
+        print(f"Export completed for '{spine_file}' scale={export_scale} ({width}x{height}) output='{output_path}' in {elapsed_time:.2f}s")
     shutil.rmtree(tmp_dir)
 
 
@@ -131,6 +141,12 @@ def run_export_in_threads(spine_paths, output, spine_exec, export_json, base_pat
         seconds = elapsed_time % 60
         print(f"Completed {completed}/{len(tasks)} time={minutes:02d}:{seconds:05.2f}")
     executor.shutdown()
+
+
+def get_png_resolution(filename):
+    image = Image.open(filename)
+    width, height = image.size
+    return width, height
 
 
 def main():
